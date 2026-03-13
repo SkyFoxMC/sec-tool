@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEC/TOOLS — IT Security Toolkit</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Classic Terminal Palette */
+      --bg:       #020202;
+      --s1:       #080a08;
+      --s2:       #0b100b;
+      --s3:       #101810;
+      --border:   #003300;
+      --border2:  #005500;
+      --text:     #33ff33; /* Phosphor Green */
+      --muted:    #00aa00; /* Dimmer Green */
+      
+      /* Accent colors scaled for the dark theme */
+      --cyan:     #33ff33; /* Mapped to green to maintain the monochrome feel */
+      --green:    #33ff33;
+      --red:      #ff3333;
+      --orange:   #ffaa00;
+      --yellow:   #ffff33;
+      
+      --mono:     'IBM Plex Mono', monospace;
+      --display:  'IBM Plex Mono', monospace; /* Forced monospace for headers too */
+    }
+
+    html { font-size: 14px; scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+      /* Subtle CRT phosphor glow */
+      text-shadow: 0 0 3px rgba(51, 255, 51, 0.4);
+    }
+
+    /* Dot grid background - updated to green */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image: radial-gradient(circle, #002200 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    /* Scanline overlay - slightly harsher for terminal feel */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.15) 2px,
+        rgba(0, 0, 0, 0.15) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* ── HEADER ───────────────────────────────────── */
+    header {
+      position: relative; z-index: 10;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(51,255,51,0.05) 0%, transparent 100%);
+      padding: 28px 40px 24px;
+      display: flex;
+      align-items: flex-end;
+      gap: 32px;
+    }
+
+    .logo {
+      font-family: var(--display);
+      font-weight: 600;
+      font-size: 2.6rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .logo span {
+      color: var(--muted);
+    }
+
+    .header-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-bottom: 3px;
+    }
+
+    .tagline {
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      background: var(--text);
+      box-shadow: 0 0 8px var(--text);
+      animation: blink 1s step-end infinite;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 12px; height: 1.1em;
+      background: var(--text);
+      vertical-align: text-bottom;
+      margin-left: 8px;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* ── TABS ─────────────────────────────────────── */
+    .tabs-wrapper {
+      position: relative; z-index: 10;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      padding: 0 40px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding-top: 10px;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .tab:hover { 
+      color: var(--text); 
+      border-color: var(--border);
+      background: var(--s1);
+    }
+
+    .tab.active {
+      color: var(--bg);
+      background: var(--text);
+      border-color: var(--text);
+      text-shadow: none; /* Remove glow for inverted text */
+    }
+
+    .tab-icon {
+      font-size: 1rem;
+    }
+
+    .tab-num {
+      font-size: 0.6rem;
+      letter-spacing: 0;
+    }
+
+    /* ── PANELS ───────────────────────────────────── */
+    main { position: relative; z-index: 10; padding: 36px 40px; max-width: 1000px; }
+
+    .panel { display: none; }
+    .panel.active { display: block; animation: scanReveal 0.3s ease-out; }
+
+    @keyframes scanReveal {
+      from { opacity: 0; clip-path: inset(0 100% 0 0); }
+      to   { opacity: 1; clip-path: inset(0 0 0 0); }
+    }
+
+    /* ── SECTION TITLE ────────────────────────────── */
+    .section-title {
+      font-family: var(--display);
+      font-weight: 600;
+      font-size: 1.6rem;
+      color: var(--text);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-title .accent { color: var(--muted); }
+
+    .section-desc {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── FORM ELEMENTS ────────────────────────────── */
+    label {
+      display: block;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    textarea,
+    select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--text);
+      background: var(--s1);
+      box-shadow: inset 0 0 8px rgba(51, 255, 51, 0.1);
+    }
+
+    textarea { min-height: 120px; }
+
+    .input-wrap { position: relative; }
+
+    .input-action {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 4px;
+    }
+
+    .input-action:hover { color: var(--text); }
+
+    .field { margin-bottom: 18px; }
+
+    /* ── BUTTONS ──────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      border: 1px solid var(--text);
+      background: transparent;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    .btn:hover {
+      background: var(--text);
+      color: var(--bg);
+      text-shadow: none;
+    }
+
+    .btn-ghost {
+      border-color: var(--border2);
+      color: var(--muted);
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--text);
+      color: var(--bg);
+      background: var(--text);
+    }
+
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+
+    /* ── CARD ─────────────────────────────────────── */
+    .card {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      border-bottom: 1px dashed var(--border2);
+      padding-bottom: 6px;
+    }
+
+    /* ── OUTPUT FIELD ─────────────────────────────── */
+    .output-field {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--text);
+      padding: 12px 16px;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: var(--text);
+      position: relative;
+      min-height: 44px;
+    }
+
+    .output-field.empty { color: var(--muted); border-left-color: var(--border2); }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+    }
+
+    .copy-btn:hover { color: var(--bg); background: var(--text); border-color: var(--text); text-shadow: none; }
+
+    /* ── DIVIDER ──────────────────────────────────── */
+    .divider {
+      border: none;
+      border-top: 1px dashed var(--border2);
+      margin: 24px 0;
+    }
+
+    /* ── GRID ─────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+    /* ── STAT PILL ────────────────────────────────── */
+    .stat {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-lbl {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    /* ── STRENGTH METER ───────────────────────────── */
+    .strength-bar-wrap {
+      height: 8px;
+      background: var(--s3);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin: 14px 0 8px;
+    }
+
+    .strength-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--text);
+      transition: width 0.4s ease;
+    }
+
+    .strength-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+
+    /* ── CHECK ITEMS ──────────────────────────────── */
+    .checks { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .check-item.pass { color: var(--text); }
+
+    .check-dot {
+      width: 10px; height: 10px;
+      border: 1px solid var(--border2);
+      flex-shrink: 0;
+    }
+
+    .check-item.pass .check-dot {
+      background: var(--text);
+      border-color: var(--text);
+      box-shadow: 0 0 4px var(--text);
+    }
+
+    .check-item.warn .check-dot {
+      background: var(--orange);
+      border-color: var(--orange);
+    }
+
+    /* ── ALGO SELECTOR ────────────────────────────── */
+    .algo-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .algo-chip {
+      padding: 6px 16px;
+      border: 1px solid var(--border2);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .algo-chip:hover { color: var(--text); border-color: var(--text); }
+    .algo-chip.active { color: var(--bg); border-color: var(--text); background: var(--text); text-shadow: none; }
+
+    /* ── CVE RESULT CARDS ─────────────────────────── */
+    .cve-card {
+      background: var(--s1);
+      border: 1px solid var(--border);
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+
+    .cve-card:hover { border-color: var(--text); }
+
+    .cve-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .cve-id {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.04em;
+    }
+
+    .cvss-badge {
+      flex-shrink: 0;
+      padding: 3px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      border: 1px solid currentColor;
+    }
+
+    .cvss-critical { color: var(--red); background: rgba(255,51,51,0.1); }
+    .cvss-high     { color: var(--orange); background: rgba(255,170,0,0.1); }
+    .cvss-medium   { color: var(--yellow); background: rgba(255,255,51,0.1); }
+    .cvss-low      { color: var(--text); background: rgba(51,255,51,0.1); }
+    .cvss-none     { color: var(--muted); }
+
+    .cve-desc {
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.7;
+      margin-bottom: 12px;
+      opacity: 0.85;
+    }
+
+    .cve-meta {
+      display: flex;
+      gap: 20px;
+      font-size: 0.68rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .cve-meta-item span { color: var(--text); }
+
+    .cve-link {
+      font-size: 0.68rem;
+      color: var(--text);
+      text-decoration: none;
+      border-bottom: 1px solid var(--muted);
+    }
+
+    .cve-link:hover { border-bottom-color: var(--text); }
+
+    /* ── SSL FIELDS ───────────────────────────────── */
+    .ssl-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .ssl-field {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      padding: 12px 16px;
+    }
+
+    .ssl-field-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .ssl-field-value {
+      font-size: 0.8rem;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .ssl-field.full { grid-column: 1 / -1; }
+
+    .ssl-field.expired .ssl-field-value { color: var(--red); }
+    .ssl-field.valid .ssl-field-value { color: var(--text); }
+
+    .san-tag {
+      display: inline-block;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 2px;
+    }
+
+    /* ── LOADING / STATUS ─────────────────────────── */
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--text);
+      padding: 20px 0;
+    }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .msg {
+      padding: 12px 16px;
+      font-size: 0.78rem;
+      margin-bottom: 14px;
+      border: 1px solid;
+    }
+
+    .msg-error { border-color: var(--red); color: var(--red); background: rgba(255,51,51,0.05); }
+    .msg-info  { border-color: var(--text); color: var(--text); background: rgba(51,255,51,0.05); }
+    .msg-ok    { border-color: var(--text); color: var(--text); background: rgba(51,255,51,0.1); }
+
+    .hidden { display: none !important; }
+
+    /* ── VERIFY ───────────────────────────────────── */
+    .verify-result {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      font-size: 0.82rem;
+      border: 1px solid;
+    }
+
+    .verify-result.match    { border-color: var(--text); color: var(--bg); background: var(--text); text-shadow:none; }
+    .verify-result.no-match { border-color: var(--red); color: var(--red); background: rgba(255,51,51,0.1); }
+
+    /* ── INPUT GROUP ──────────────────────────────── */
+    .input-group {
+      display: flex;
+      gap: 0;
+    }
+
+    .input-group input {
+      border-right: none;
+    }
+
+    .input-group .btn {
+      white-space: nowrap;
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────── */
+    @media (max-width: 700px) {
+      header { padding: 20px; flex-direction: column; align-items: flex-start; gap: 8px; }
+      .tabs-wrapper { padding: 0 16px; }
+      main { padding: 24px 20px; }
+      .grid-2, .grid-3, .grid-4, .ssl-grid { grid-template-columns: 1fr; }
+      .ssl-field.full { grid-column: 1; }
+    }
+
+    /* ── EMPTY STATE ──────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      border: 1px dashed var(--border2);
+    }
+
+    .empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SEC<span>/</span>TOOLS<span class="cursor"></span></div>
+  <div class="header-meta">
+    <div class="tagline">IT Security Toolkit — Client-Side Only</div>
+    <div class="status-bar">
+      <div class="status-dot"></div>
+      <span>No data transmitted externally &nbsp;·&nbsp; LOCALHOST READY</span>
+    </div>
+  </div>
+</header>
+
+<div class="tabs-wrapper">
+  <button class="tab active" onclick="switchTab(0)">
+    <span class="tab-icon">#</span> Password Analyzer
+    <span class="tab-num">[01]</span>
+  </button>
+  <button class="tab" onclick="switchTab(1)">
+    <span class="tab-icon">#</span> Hash Generator
+    <span class="tab-num">[02]</span>
+  </button>
+  <button class="tab" onclick="switchTab(2)">
+    <span class="tab-icon">#</span> CVE Lookup
+    <span class="tab-num">[03]</span>
+  </button>
+  <button class="tab" onclick="switchTab(3)">
+    <span class="tab-icon">#</span> SSL Decoder
+    <span class="tab-num">[04]</span>
+  </button>
+</div>
+
+<main>
+
+  <div class="panel active" id="panel-0">
+    <div class="section-title"><span class="accent">>_</span> Password Strength Analyzer</div>
+    <div class="section-desc">Entirely client-side. Your password never leaves this terminal.</div>
+
+    <div class="field">
+      <label>Enter Password</label>
+      <div class="input-wrap">
+        <input type="password" id="pw-input" placeholder="Type your password..." oninput="analyzePw()" autocomplete="off" spellcheck="false">
+        <button class="input-action" onclick="togglePwVis()" title="Toggle visibility">[SHOW]</button>
+      </div>
+    </div>
+
+    <div class="strength-bar-wrap">
+      <div class="strength-bar" id="strength-bar"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <span class="strength-label" id="strength-label" style="color: var(--muted)">AWAITING INPUT</span>
+      <span style="font-size:0.72rem; color:var(--muted)">Entropy: <span id="entropy-val" style="color:var(--text)">—</span> bits</span>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:18px;">
+      <div class="stat"><div class="stat-val" id="pw-len">0</div><div class="stat-lbl">Length</div></div>
+      <div class="stat"><div class="stat-val" id="pw-charset">0</div><div class="stat-lbl">Charset</div></div>
+      <div class="stat"><div class="stat-val" id="pw-unique">0</div><div class="stat-lbl">Unique</div></div>
+      <div class="stat"><div class="stat-val" id="pw-crack">—</div><div class="stat-lbl">Crack Time</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Character Composition</div>
+        <div class="checks" id="pw-checks">
+          <div class="check-item" id="chk-len">    <div class="check-dot"></div> Min. 12 characters</div>
+          <div class="check-item" id="chk-upper">  <div class="check-dot"></div> Uppercase letters (A–Z)</div>
+          <div class="check-item" id="chk-lower">  <div class="check-dot"></div> Lowercase letters (a–z)</div>
+          <div class="check-item" id="chk-digit">  <div class="check-dot"></div> Numbers (0–9)</div>
+          <div class="check-item" id="chk-symbol"> <div class="check-dot"></div> Symbols (!@#$…)</div>
+          <div class="check-item" id="chk-20">     <div class="check-dot"></div> 20+ characters</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pattern Warnings</div>
+        <div class="checks" id="pw-warnings">
+          <div class="check-item" id="warn-seq">   <div class="check-dot"></div> Sequential chars (abc, 123)</div>
+          <div class="check-item" id="warn-rep">   <div class="check-dot"></div> Repeated chars (aaa, 111)</div>
+          <div class="check-item" id="warn-kbd">   <div class="check-dot"></div> Keyboard walks (qwerty)</div>
+          <div class="check-item" id="warn-common"> <div class="check-dot"></div> Common words/patterns</div>
+          <div class="check-item" id="warn-leet">  <div class="check-dot"></div> Leet substitution detected</div>
+          <div class="check-item" id="warn-date">  <div class="check-dot"></div> Date-like pattern (2024)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">Recommendations</div>
+      <div id="pw-recommendations" style="font-size:0.8rem; color:var(--muted); line-height:1.8;">
+        > Start typing a password to see personalized recommendations...
+      </div>
+    </div>
+
+  </div>
+
+  <div class="panel" id="panel-1">
+    <div class="section-title"><span class="accent">>_</span> Hash Generator & Verifier</div>
+    <div class="section-desc">Generate and verify cryptographic hashes in-browser.</div>
+
+    <div class="algo-chips" id="algo-chips">
+      <button class="algo-chip active" onclick="setAlgo('MD5',this)">MD5</button>
+      <button class="algo-chip" onclick="setAlgo('SHA1',this)">SHA-1</button>
+      <button class="algo-chip" onclick="setAlgo('SHA256',this)">SHA-256</button>
+      <button class="algo-chip" onclick="setAlgo('SHA512',this)">SHA-512</button>
+      <button class="algo-chip" onclick="setAlgo('SHA3',this)">SHA-3</button>
+      <button class="algo-chip" onclick="setAlgo('RIPEMD160',this)">RIPEMD-160</button>
+    </div>
+
+    <div class="field">
+      <label>Input Text</label>
+      <textarea id="hash-input" placeholder="Enter text to hash…" spellcheck="false"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Input File (optional — hash file contents)</label>
+      <input type="file" id="hash-file" style="display:none" onchange="hashFile()">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="generateHash()">[EXEC] Generate</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('hash-file').click()">[LOAD] File</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('hash-input').value=''; document.getElementById('hash-output').textContent='—'; document.getElementById('hash-output').className='output-field empty'">[CLR] Reset</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Generated Hash (<span id="algo-label">MD5</span>)</label>
+      <div class="output-field empty" id="hash-output">—
+        <button class="copy-btn" onclick="copyHash()">COPY</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-title" style="font-size:1.2rem; margin-bottom:6px;"><span class="accent">↳</span> Verify Hash</div>
+    <div class="section-desc">Paste an expected hash to compare against the generated output.</div>
+
+    <div class="field">
+      <label>Expected Hash</label>
+      <input type="text" id="verify-input" placeholder="Paste expected hash…" spellcheck="false">
+    </div>
+
+    <div class="btn-row" style="margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="verifyHash()">[COMPARE]</button>
+    </div>
+
+    <div id="verify-result" class="hidden"></div>
+
+  </div>
+
+  <div class="panel" id="panel-2">
+    <div class="section-title"><span class="accent">>_</span> CVE Vulnerability Lookup</div>
+    <div class="section-desc">Query the NVD database by CVE ID or keyword.</div>
+
+    <div class="field">
+      <label>Search by CVE ID or keyword</label>
+      <div class="input-group">
+        <input type="text" id="cve-input" placeholder="CVE-2021-44228 or 'log4j'…" onkeydown="if(event.key==='Enter')lookupCve()" spellcheck="false">
+        <button class="btn btn-primary" onclick="lookupCve()">QUERY</button>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-bottom:20px;">
+      <span style="font-size:0.7rem; color:var(--muted)">Quick queries:</span>
+      <button class="btn btn-ghost" style="padding:4px 12px; font-size:0.7rem" onclick="quickCve('CVE-2021-44228')">Log4Shell</button>
+      <button class="btn btn-ghost" style="padding:4px 12px; font-size:0.7rem" onclick="quickCve('CVE-2017-0144')">EternalBlue</button>
+      <button class="btn btn-ghost" style="padding:4px 12px; font-size:0.7rem" onclick="quickCve('CVE-2014-0160')">Heartbleed</button>
+    </div>
+
+    <div id="cve-loading" class="loading hidden">
+      <div class="spinner"></div> Establishing connection to NVD…
+    </div>
+
+    <div id="cve-error" class="hidden"></div>
+    <div id="cve-results"></div>
+
+  </div>
+
+  <div class="panel" id="panel-3">
+    <div class="section-title"><span class="accent">>_</span> SSL Certificate Decoder</div>
+    <div class="section-desc">Paste any PEM-encoded X.509 certificate to inspect its blocks.</div>
+
+    <div class="field">
+      <label>PEM Certificate Block</label>
+      <textarea id="ssl-input" placeholder="-----BEGIN CERTIFICATE-----&#10;MIID...&#10;-----END CERTIFICATE-----" style="min-height:160px; font-size:0.75rem;" spellcheck="false"></textarea>
+    </div>
+
+    <div class="btn-row" style="margin-bottom:20px;">
+      <button class="btn btn-primary" onclick="decodeSsl()">[DECODE]</button>
+      <button class="btn btn-ghost" onclick="loadSslExample()">[LOAD] Example</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('ssl-input').value=''; document.getElementById('ssl-result').innerHTML=''; document.getElementById('ssl-error').className='hidden'">[CLR]</button>
+    </div>
+
+    <div id="ssl-error" class="hidden"></div>
+    <div id="ssl-result"></div>
+
+  </div>
+
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════ */
+function switchTab(idx) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.panel').forEach((p, i) => p.classList.toggle('active', i === idx));
+}
+
+/* ══════════════════════════════════════════════════
+   PANEL 01 — PASSWORD ANALYZER
+══════════════════════════════════════════════════ */
+function togglePwVis() {
+  const inp = document.getElementById('pw-input');
+  const btn = document.querySelector('.input-action');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '[HIDE]';
+  } else {
+    inp.type = 'password';
+    btn.textContent = '[SHOW]';
+  }
+}
+
+const COMMON = ['password','passw0rd','qwerty','letmein','welcome','monkey','dragon','master','login','abc123','111111','123456','password1','iloveyou','admin','root','toor','test','guest'];
+const LEET = {'@':'a','3':'e','1':'i','0':'o','5':'s','$':'s','7':'t'};
+const KBD_WALKS = ['qwerty','asdfgh','zxcvbn','qweasd','123456','654321','!@#$%^'];
+
+function analyzePw() {
+  const pw = document.getElementById('pw-input').value;
+  const len = pw.length;
+
+  // Charset
+  const hasUpper  = /[A-Z]/.test(pw);
+  const hasLower  = /[a-z]/.test(pw);
+  const hasDigit  = /[0-9]/.test(pw);
+  const hasSymbol = /[^a-zA-Z0-9]/.test(pw);
+  let charset = 0;
+  if (hasLower)  charset += 26;
+  if (hasUpper)  charset += 26;
+  if (hasDigit)  charset += 10;
+  if (hasSymbol) charset += 32;
+
+  const entropy = len > 0 ? Math.round(len * Math.log2(Math.max(charset, 1))) : 0;
+  const unique  = new Set(pw).size;
+
+  // Patterns
+  const normalized = pw.toLowerCase().replace(/@/g,'a').replace(/3/g,'e').replace(/1/g,'i').replace(/0/g,'o').replace(/5/g,'s').replace(/\$/g,'s').replace(/7/g,'t');
+  const isLeet = normalized !== pw.toLowerCase() && COMMON.some(w => normalized.includes(w));
+  const hasSeq  = /(?:abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz|012|123|234|345|456|567|678|789)/i.test(pw);
+  const hasRep  = /(.)\1{2,}/.test(pw);
+  const hasKbd  = KBD_WALKS.some(w => pw.toLowerCase().includes(w));
+  const hasCommon = COMMON.some(w => pw.toLowerCase().includes(w));
+  const hasDate = /\b(19|20)\d{2}\b/.test(pw) || /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/.test(pw);
+
+  // Checks
+  setCheck('chk-len',    len >= 12);
+  setCheck('chk-upper',  hasUpper);
+  setCheck('chk-lower',  hasLower);
+  setCheck('chk-digit',  hasDigit);
+  setCheck('chk-symbol', hasSymbol);
+  setCheck('chk-20',     len >= 20);
+
+  // Warnings (warn = bad = show in red/orange)
+  setWarn('warn-seq',    hasSeq);
+  setWarn('warn-rep',    hasRep);
+  setWarn('warn-kbd',    hasKbd);
+  setWarn('warn-common', hasCommon);
+  setWarn('warn-leet',   isLeet);
+  setWarn('warn-date',   hasDate);
+
+  // Score 0–100
+  let score = 0;
+  if (len > 0)   score += Math.min(30, len * 2.5);
+  if (hasUpper)  score += 10;
+  if (hasLower)  score += 10;
+  if (hasDigit)  score += 10;
+  if (hasSymbol) score += 20;
+  if (len >= 20) score += 10;
+  if (hasSeq || hasRep || hasKbd) score -= 15;
+  if (hasCommon) score -= 25;
+  if (isLeet)    score -= 10;
+  if (hasDate)   score -= 10;
+  score = Math.max(0, Math.min(100, score));
+
+  // Crack time
+  const combinations = charset > 0 ? Math.pow(charset, len) : 0;
+  const guessesPerSec = 1e12;
+  const seconds = combinations / guessesPerSec;
+  let crackStr = '—';
+  if (len === 0) crackStr = '—';
+  else if (seconds < 1)       crackStr = 'Instant';
+  else if (seconds < 60)      crackStr = '<1 min';
+  else if (seconds < 3600)    crackStr = Math.round(seconds/60)+'m';
+  else if (seconds < 86400)   crackStr = Math.round(seconds/3600)+'h';
+  else if (seconds < 2592000) crackStr = Math.round(seconds/86400)+'d';
+  else if (seconds < 31536000)crackStr = Math.round(seconds/2592000)+'mo';
+  else if (seconds < 3153600000) crackStr = Math.round(seconds/31536000)+'yr';
+  else crackStr = '>1000yr';
+
+  // Bar
+  const bar = document.getElementById('strength-bar');
+  let color, label;
+  if (len === 0)     { color = 'var(--muted)'; label = 'AWAITING INPUT'; score = 0; }
+  else if (score < 25)  { color = 'var(--red)';    label = 'CRITICAL: VERY WEAK'; }
+  else if (score < 45)  { color = 'var(--orange)'; label = 'WARN: WEAK'; }
+  else if (score < 65)  { color = 'var(--yellow)'; label = 'FAIR'; }
+  else if (score < 80)  { color = 'var(--text)';   label = 'STRONG'; }
+  else                   { color = 'var(--text)';  label = 'VERY STRONG'; }
+
+  bar.style.width = score + '%';
+  bar.style.background = color;
+  document.getElementById('strength-label').textContent = label;
+  document.getElementById('strength-label').style.color = color;
+  document.getElementById('entropy-val').textContent = len > 0 ? entropy : '—';
+  document.getElementById('pw-len').textContent     = len;
+  document.getElementById('pw-charset').textContent  = charset || '—';
+  document.getElementById('pw-unique').textContent   = len > 0 ? unique : '—';
+  document.getElementById('pw-crack').textContent    = crackStr;
+
+  // Recommendations
+  const recs = [];
+  if (!len)         recs.push('> Start typing a password to begin analysis...');
+  else {
+    if (len < 12)   recs.push('[!] Increase length to at least 12 characters.');
+    if (!hasUpper)  recs.push('[!] Add uppercase letters.');
+    if (!hasLower)  recs.push('[!] Add lowercase letters.');
+    if (!hasDigit)  recs.push('[!] Include numbers.');
+    if (!hasSymbol) recs.push('[!] Include symbols like !@#$%^&*.');
+    if (hasCommon)  recs.push('[WARN] Avoid common dictionary words.');
+    if (hasSeq)     recs.push('[WARN] Remove sequential character patterns.');
+    if (hasRep)     recs.push('[WARN] Avoid repeated characters (e.g. "aaa").');
+    if (hasKbd)     recs.push('[WARN] Avoid keyboard walks (e.g. "qwerty").');
+    if (isLeet)     recs.push('[WARN] Leet-speak substitutions do not improve security.');
+    if (len >= 20 && score >= 80) recs.push('[OK] Excellent. Consider storing in a password manager.');
+    else if (score >= 65) recs.push('[OK] Good password. Passphrases are even stronger.');
+  }
+  document.getElementById('pw-recommendations').innerHTML = recs.map(r => `<div>${r}</div>`).join('');
+}
+
+function setCheck(id, pass) {
+  const el = document.getElementById(id);
+  el.className = 'check-item' + (pass ? ' pass' : '');
+}
+
+function setWarn(id, bad) {
+  const el = document.getElementById(id);
+  el.className = 'check-item' + (bad ? ' warn' : ' pass');
+}
+
+/* ══════════════════════════════════════════════════
+   PANEL 02 — HASH GENERATOR
+══════════════════════════════════════════════════ */
+let currentAlgo = 'MD5';
+
+function setAlgo(algo, el) {
+  currentAlgo = algo;
+  document.querySelectorAll('.algo-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('algo-label').textContent = algo.replace('SHA256','SHA-256').replace('SHA512','SHA-512').replace('SHA1','SHA-1').replace('SHA3','SHA-3');
+}
+
+function generateHash() {
+  const input = document.getElementById('hash-input').value;
+  if (!input.trim()) { showHashOut('ERR: NO_INPUT_DETECTED', true); return; }
+  computeHash(input);
+}
+
+function computeHash(input) {
+  let hash;
+  try {
+    switch(currentAlgo) {
+      case 'MD5':      hash = CryptoJS.MD5(input).toString(); break;
+      case 'SHA1':     hash = CryptoJS.SHA1(input).toString(); break;
+      case 'SHA256':   hash = CryptoJS.SHA256(input).toString(); break;
+      case 'SHA512':   hash = CryptoJS.SHA512(input).toString(); break;
+      case 'SHA3':     hash = CryptoJS.SHA3(input).toString(); break;
+      case 'RIPEMD160':hash = CryptoJS.RIPEMD160(input).toString(); break;
+      default:         hash = CryptoJS.SHA256(input).toString();
+    }
+    showHashOut(hash, false);
+  } catch(e) { showHashOut('ERR: ' + e.message, true); }
+}
+
+function hashFile() {
+  const file = document.getElementById('hash-file').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const wordArray = CryptoJS.lib.WordArray.create(e.target.result);
+    let hash;
+    switch(currentAlgo) {
+      case 'MD5':      hash = CryptoJS.MD5(wordArray).toString(); break;
+      case 'SHA1':     hash = CryptoJS.SHA1(wordArray).toString(); break;
+      case 'SHA256':   hash = CryptoJS.SHA256(wordArray).toString(); break;
+      case 'SHA512':   hash = CryptoJS.SHA512(wordArray).toString(); break;
+      case 'SHA3':     hash = CryptoJS.SHA3(wordArray).toString(); break;
+      case 'RIPEMD160':hash = CryptoJS.RIPEMD160(wordArray).toString(); break;
+      default:         hash = CryptoJS.SHA256(wordArray).toString();
+    }
+    document.getElementById('hash-input').value = `[FILE_LOADED: ${file.name} — ${(file.size/1024).toFixed(1)} KB]`;
+    showHashOut(hash, false);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showHashOut(text, empty) {
+  const el = document.getElementById('hash-output');
+  el.className = 'output-field' + (empty ? ' empty' : '');
+  el.innerHTML = text + '<button class="copy-btn" onclick="copyHash()">[COPY]</button>';
+}
+
+function copyHash() {
+  const text = document.getElementById('hash-output').textContent.replace('[COPY]','').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('#hash-output .copy-btn');
+    if(btn) { btn.textContent = '[COPIED]'; setTimeout(()=>btn.textContent='[COPY]', 1500); }
+  });
+}
+
+function verifyHash() {
+  const expected = document.getElementById('verify-input').value.trim().toLowerCase();
+  const generated = document.getElementById('hash-output').textContent.replace('[COPY]','').trim().toLowerCase();
+  const res = document.getElementById('verify-result');
+  res.className = '';
+  if (!expected || !generated || generated === '—') {
+    res.className = 'verify-result no-match';
+    res.innerHTML = '[!] Awaiting hash generation and expected input...';
+    return;
+  }
+  if (expected === generated) {
+    res.className = 'verify-result match';
+    res.innerHTML = '[OK] MATCH — Integrity verified.';
+  } else {
+    res.className = 'verify-result no-match';
+    res.innerHTML = '[FAIL] NO MATCH — Potential tampering detected.';
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   PANEL 03 — CVE LOOKUP
+══════════════════════════════════════════════════ */
+function quickCve(id) {
+  document.getElementById('cve-input').value = id;
+  lookupCve();
+}
+
+async function lookupCve() {
+  const query = document.getElementById('cve-input').value.trim();
+  if (!query) return;
+
+  const loading = document.getElementById('cve-loading');
+  const errEl   = document.getElementById('cve-error');
+  const results = document.getElementById('cve-results');
+
+  loading.classList.remove('hidden');
+  errEl.className = 'hidden';
+  results.innerHTML = '';
+
+  const isCveId = /^CVE-\d{4}-\d+$/i.test(query);
+  const url = isCveId
+    ? `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${encodeURIComponent(query.toUpperCase())}`
+    : `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(query)}&resultsPerPage=8`;
+
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    loading.classList.add('hidden');
+
+    const vulns = data.vulnerabilities || [];
+    if (!vulns.length) {
+      results.innerHTML = `<div class="empty-state"><div class="empty-icon">/0/</div>NO_RECORDS_FOUND<br>Query: "${query}"</div>`;
+      return;
+    }
+
+    results.innerHTML = `<div style="font-size:0.72rem;color:var(--muted);margin-bottom:14px;">[+] Query matched ${data.totalResults} record(s) — displaying ${vulns.length}</div>`;
+
+    vulns.forEach(v => {
+      const cve   = v.cve;
+      const id    = cve.id;
+      const descs = cve.descriptions || [];
+      const desc  = (descs.find(d => d.lang === 'en') || descs[0] || {}).value || 'No description available.';
+      const metrics = cve.metrics || {};
+      let score = null, severity = null;
+
+      // Try CVSS v3.1 first, then v3.0, then v2
+      const m31 = metrics.cvssMetricV31?.[0]?.cvssData;
+      const m30 = metrics.cvssMetricV30?.[0]?.cvssData;
+      const m2  = metrics.cvssMetricV2?.[0]?.cvssData;
+      if (m31)       { score = m31.baseScore; severity = m31.baseSeverity; }
+      else if (m30)  { score = m30.baseScore; severity = m30.baseSeverity; }
+      else if (m2)   { score = m2.baseScore;  severity = m2.baseSeverity; }
+
+      const published = cve.published ? new Date(cve.published).toLocaleDateString('en-GB', {year:'numeric',month:'short',day:'numeric'}) : '—';
+      const modified  = cve.lastModified ? new Date(cve.lastModified).toLocaleDateString('en-GB', {year:'numeric',month:'short',day:'numeric'}) : '—';
+      const refs      = (cve.references || []).slice(0, 3);
+
+      let badgeClass = 'cvss-none';
+      let badgeText  = 'N/A';
+      if (severity) {
+        const s = severity.toLowerCase();
+        badgeText = severity + (score ? ' ' + score : '');
+        if (s === 'critical') badgeClass = 'cvss-critical';
+        else if (s === 'high') badgeClass = 'cvss-high';
+        else if (s === 'medium') badgeClass = 'cvss-medium';
+        else if (s === 'low') badgeClass = 'cvss-low';
+      }
+
+      results.innerHTML += `
+        <div class="cve-card">
+          <div class="cve-header">
+            <span class="cve-id">${id}</span>
+            <span class="cvss-badge ${badgeClass}">${badgeText}</span>
+          </div>
+          <div class="cve-desc">${desc.length > 400 ? desc.slice(0, 400) + '…' : desc}</div>
+          <div class="cve-meta">
+            <div class="cve-meta-item">PUB: <span>${published}</span></div>
+            <div class="cve-meta-item">MOD: <span>${modified}</span></div>
+            ${refs.length ? `<div class="cve-meta-item" style="margin-left:auto;">${refs.map(r=>`<a class="cve-link" href="${r.url}" target="_blank" rel="noopener">[EXT_LINK]</a>`).join(' &nbsp; ')}</div>` : ''}
+          </div>
+        </div>`;
+    });
+
+  } catch(err) {
+    loading.classList.add('hidden');
+    errEl.className = 'msg msg-error';
+    errEl.innerHTML = `[ERR] NVD_API_UNREACHABLE<br><small style="opacity:0.6">${err.message}</small>`;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   PANEL 04 — SSL DECODER
+══════════════════════════════════════════════════ */
+function decodeSsl() {
+  const pem  = document.getElementById('ssl-input').value.trim();
+  const err  = document.getElementById('ssl-error');
+  const res  = document.getElementById('ssl-result');
+
+  err.className = 'hidden';
+  res.innerHTML = '';
+
+  if (!pem) { err.className='msg msg-error'; err.textContent='[ERR] PEM_DATA_REQUIRED'; return; }
+
+  try {
+    const cert = forge.pki.certificateFromPem(pem);
+
+    const getField = (obj, key) => {
+      const attr = obj.attributes.find(a => a.name === key || a.shortName === key);
+      return attr ? attr.value : '—';
+    };
+
+    // Subject
+    const subjectCN = getField(cert.subject, 'commonName');
+    const subjectO  = getField(cert.subject, 'organizationName');
+    const subjectOU = getField(cert.subject, 'organizationalUnitName');
+    const subjectC  = getField(cert.subject, 'countryName');
+    const subjectST = getField(cert.subject, 'stateOrProvinceName');
+
+    // Issuer
+    const issuerCN = getField(cert.issuer, 'commonName');
+    const issuerO  = getField(cert.issuer, 'organizationName');
+
+    // Validity
+    const notBefore = cert.validity.notBefore;
+    const notAfter  = cert.validity.notAfter;
+    const now       = new Date();
+    const isExpired = now > notAfter;
+    const isNotYet  = now < notBefore;
+    const daysLeft  = Math.round((notAfter - now) / 86400000);
+
+    // SANs
+    const sanExt = cert.extensions.find(e => e.name === 'subjectAltName');
+    const sans   = sanExt ? (sanExt.altNames || []).map(a => a.value) : [];
+
+    // Key info
+    const pk   = cert.publicKey;
+    let keyInfo = '—';
+    try {
+      if (pk.n) keyInfo = `RSA ${pk.n.bitLength()} bit`;
+      else if (pk.curve) keyInfo = `EC ${pk.curve}`;
+      else keyInfo = 'Unknown';
+    } catch(e) {}
+
+    // Serial
+    const serial = cert.serialNumber;
+
+    // Signature algo
+    const sigAlgo = cert.signatureOid;
+    const sigNames = {
+      '1.2.840.113549.1.1.11': 'SHA256withRSA',
+      '1.2.840.113549.1.1.12': 'SHA384withRSA',
+      '1.2.840.113549.1.1.13': 'SHA512withRSA',
+      '1.2.840.10045.4.3.2':   'SHA256withECDSA',
+      '1.2.840.10045.4.3.3':   'SHA384withECDSA',
+      '1.2.840.10045.4.3.4':   'SHA512withECDSA',
+    };
+
+    // Fingerprint (SHA-256)
+    const md = forge.md.sha256.create();
+    md.update(forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes());
+    const fp = md.digest().toHex().match(/.{2}/g).join(':').toUpperCase();
+
+    const validityClass = isExpired ? 'expired' : (isNotYet ? 'warn' : 'valid');
+    const validityStatus = isExpired ? '[FAIL] EXPIRED' : (isNotYet ? '[WARN] NOT YET VALID' : `[OK] VALID (T-${daysLeft} DAYS)`);
+
+    res.innerHTML = `
+      <div class="msg msg-${isExpired ? 'error' : (isNotYet ? 'error' : 'ok')}" style="margin-bottom:18px">
+        ${isExpired ? '[!] CERTIFICATE HAS EXPIRED.' : (isNotYet ? '[!] CERTIFICATE NOT YET ACTIVE.' : `[+] CERTIFICATE VALID. EXP: ${daysLeft} DAYS.`)}
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Subject Data</div>
+        <div class="ssl-grid">
+          <div class="ssl-field"><div class="ssl-field-label">Common Name (CN)</div><div class="ssl-field-value">${subjectCN}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Organization (O)</div><div class="ssl-field-value">${subjectO}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Org. Unit (OU)</div><div class="ssl-field-value">${subjectOU}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Country</div><div class="ssl-field-value">${subjectC} ${subjectST !== '—' ? '/ '+subjectST : ''}</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Issuer Data</div>
+        <div class="ssl-grid">
+          <div class="ssl-field"><div class="ssl-field-label">Common Name (CN)</div><div class="ssl-field-value">${issuerCN}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Organization (O)</div><div class="ssl-field-value">${issuerO}</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Validity & Cryptography</div>
+        <div class="ssl-grid">
+          <div class="ssl-field"><div class="ssl-field-label">Not Before</div><div class="ssl-field-value">${notBefore.toUTCString()}</div></div>
+          <div class="ssl-field ${validityClass}"><div class="ssl-field-label">Not After</div><div class="ssl-field-value">${notAfter.toUTCString()}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Status</div><div class="ssl-field-value ${isExpired?'ssl-field expired':(!isNotYet?'ssl-field valid':'')}">${validityStatus}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Public Key</div><div class="ssl-field-value">${keyInfo}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Signature Algorithm</div><div class="ssl-field-value">${sigNames[sigAlgo] || sigAlgo}</div></div>
+          <div class="ssl-field"><div class="ssl-field-label">Serial Number</div><div class="ssl-field-value">${serial}</div></div>
+        </div>
+      </div>
+
+      ${sans.length ? `
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Subject Alternative Names (SANs: ${sans.length})</div>
+        <div>${sans.map(s=>`<span class="san-tag">${s}</span>`).join('')}</div>
+      </div>` : ''}
+
+      <div class="card">
+        <div class="card-title">SHA-256 Fingerprint</div>
+        <div style="font-size:0.72rem; word-break:break-all; color:var(--text); font-family:var(--mono)">${fp}</div>
+      </div>`;
+
+  } catch(e) {
+    err.className = 'msg msg-error';
+    err.innerHTML = `[ERR] PARSE_FAILED<br><small style="opacity:0.6">${e.message}</small>`;
+  }
+}
+
+function loadSslExample() {
+  document.getElementById('ssl-input').value = `-----BEGIN CERTIFICATE-----
+MIIFFjCCAv6gAwIBAgIRAJErCErPDBinU/bWLiWnX1owDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjAwOTA0MDAwMDAw
+WhcNMjUwOTE1MTYwMDAwWjAyMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg
+RW5jcnlwdDELMAkGA1UEAxMCUjMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+AoIBAQC7AhUozPaglNMPEuyNVZLD+ILxmaZ6QoinXSaqtSu5xUyxr45r+XXIo9cP
+R5QUVTVXjJ6oojkZ9YI8QqlObvU7wy7bjcCwXPNZOOftz2nwWgsbvsCUJCWH+jdx
+mxnhh5OGLL+u5L9Z2duDn2uyuI5HJWlEFZHH0HrzSYH+JKSmcnWzAEDQc1v99CQ
+0bqLLtzGYL2L5wCIe2xHzaEiIVqHKLuXhOCnLbKGFWmLFXWqXSL21z2LZo8sRNA
+Y7hAK3oCo3T63aFjVYoAMpyoiY6MWZH2psWKFcPRNXqYOoJHBHfvEL5TGFSr18T
+Xfl9XELR5H6s5E7D3C7QOIW3mXA5AgMBAAGjggFTMIIBTzAOBgNVHQ8BAf8EBAMC
+AYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUFC6zF7dYVsuuUAlA5h+vnYsU
+wswwHwYDVR0jBBgwFoAUebRZ5nu25eQBc4AIiMgaWPbpm24wDgYDVR0PAQH/BAQD
+AgGGMBMGA1UdJQQMMAoGCCsGAQUFBwMCMC8GA1UdHwQoMCYwJKAioCCGHmh0dHA6
+Ly9jcmwucGtpLmdvb2cvR1RTMW8xLmNybDA8BggrBgEFBQcBAQQwMC4wLAYIKwYB
+BQUHMAKGIGh0dHA6Ly9wa2kuZ29vZy9yZXBvL2NlcnRzL2d0czEuZGVyMDYGA1Ud
+IAQvMC0wCAYGZ4EMAQIBMAsGCSsGAQQBgt8TAjAMBgpghkgBhv1sAQICMAgGBmeB
+DAECBDATBGNR5sTTEQIEAwIBBjANBgkqhkiG9w0BAQsFAAOCAgEAWTk+XIkQLfGB
+tCXzNE+NCZE13kPzn9fHwsLLBp4l4bOTBj9hh+t+eLGi7LF3vNXJxQUJRUKkMM2
+EIUGaEdl/fV2RKq6MVGDfJOzjbw+Rlsz5EXAjR7n2R8GJXKB3JNI4O3QHlFxaH7
+D/qOOsMFDEQ8bOdXy0rT5HtOYmGVFKnrqEdTt8eL8NxaxJn+bKIoHF14nBXVZiC
+K2V+lXJxVpFUQCbRqgLLbx1hLBfXoigrCNrxnUF1MYzMgeSjsMpzPiaqpJxXwSi
+XZ8ZCsTSqQ3GQSE5RiJJm4fJnG5CvO5W7qMHUMjF/p91rCqH+I5DVeD1Z6f1wS7
+gJ3iLKvHpQkFEBZCvLtcVcFmVSWbCyFXkTl/D/i0DJlHGsmBqiNt6rl6+5h/4RN
+AkHoVGVl38ERNdLrxPQ7pC8B5XcxZXsI6CJbh2hH6gqJSfI6Vy89RzIZ4V0NDTV
+L5N3Xh7sWZBTmm7TlnF1AiW0R6Ai/Cg6I+h9KPoiMYXU7NnlZbxq6JHdG8HPEX
+5Fot0lI5j5Qz8RkrHSTf/h+lAEAWEm0l03Yn0WJ3CWaJMXUlDgXVTGfJ3M77Gog
+gLxomD3Vd14ITNJ9HJKP5WOp0cM6kAbZ5JJQ/3g4Fh0l3j1Q2k1F9Y+P/Q==
+-----END CERTIFICATE-----`;
+  decodeSsl();
+}
+</script>
+
+</body>
+</html>
